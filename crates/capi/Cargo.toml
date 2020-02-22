@@ -9,3 +9,5 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 rustc-demangle = { version = "0.1.16", path = "../.." }
+libc = { version = "0.2", default-features = false }
+panic-abort = "0.3"

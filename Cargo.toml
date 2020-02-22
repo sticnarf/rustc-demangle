@@ -22,4 +22,5 @@ compiler_builtins = { version = '0.1.2', optional = true }
 rustc-dep-of-std = ['core', 'compiler_builtins']
 
 [profile.release]
+panic = "abort"
 lto = true

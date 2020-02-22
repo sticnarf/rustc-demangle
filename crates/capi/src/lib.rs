@@ -1,7 +1,31 @@
+#![no_std]
+#![feature(lang_items)]
+#![feature(core_intrinsics)]
+
+extern crate libc;
+extern crate panic_abort;
 extern crate rustc_demangle;
 
-use std::io::Write;
-use std::os::raw::{c_char, c_int};
+use libc::*;
+
+struct BytesBuf<'a>(&'a mut [u8]);
+
+impl core::fmt::Write for BytesBuf<'_> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let bytes = s.as_bytes();
+        let buf_ptr = self.0.as_mut_ptr();
+        let buf_len = self.0.len();
+        if buf_len < bytes.len() {
+            return Err(core::fmt::Error);
+        }
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf_ptr, bytes.len());
+            self.0 =
+                core::slice::from_raw_parts_mut(buf_ptr.add(bytes.len()), buf_len - bytes.len());
+        }
+        Ok(())
+    }
+}
 
 /// C-style interface for demangling.
 /// Demangles symbol given in `mangled` argument into `out` buffer
@@ -16,14 +40,16 @@ pub unsafe extern "C" fn rustc_demangle(
     out: *mut c_char,
     out_size: usize,
 ) -> c_int {
-    let mangled_str = match std::ffi::CStr::from_ptr(mangled).to_str() {
+    let len = strlen(mangled);
+    let mangled = core::slice::from_raw_parts(mangled as *const u8, len as usize);
+    let mangled_str = match core::str::from_utf8(mangled) {
         Ok(s) => s,
         Err(_) => return 0,
     };
     match rustc_demangle::try_demangle(mangled_str) {
         Ok(demangle) => {
-            let mut out_slice = std::slice::from_raw_parts_mut(out as *mut u8, out_size);
-            match write!(out_slice, "{:#}\0", demangle) {
+            let mut out_slice = BytesBuf(core::slice::from_raw_parts_mut(out as *mut u8, out_size));
+            match core::fmt::write(&mut out_slice, format_args!("{:#}\0", demangle)) {
                 Ok(_) => return 1,
                 Err(_) => return 0,
             }
